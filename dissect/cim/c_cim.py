@@ -2,7 +2,6 @@ from collections import namedtuple
 
 from dissect import cstruct
 
-
 cim_def = """
 // Mapping
 

@@ -3,7 +3,6 @@ from collections import namedtuple
 from dissect.cim.c_cim import c_cim
 from dissect.cim.exceptions import Error
 
-
 ObjectPath = namedtuple("ObjectPath", ["hostname", "namespace", "class_", "instance"])
 
 
