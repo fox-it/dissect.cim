@@ -3,7 +3,6 @@ from io import BytesIO
 from dissect.util.ts import wintimestamp
 
 from dissect.cim.c_cim import (
-    c_cim,
     ARRAY_STATES,
     BOOLEAN_STATES,
     BUILTIN_PROPERTIES,
@@ -13,6 +12,7 @@ from dissect.cim.c_cim import (
     DYNPROPS_STATES,
     ClassDefinitionPropertyState,
     ClassInstancePropertyState,
+    c_cim,
 )
 from dissect.cim.exceptions import Error
 

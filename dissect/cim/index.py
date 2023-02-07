@@ -3,7 +3,12 @@ import string
 from functools import lru_cache, partial
 from io import BytesIO
 
-from dissect.cim.c_cim import c_cim, INDEX_PAGE_INVALID, INDEX_PAGE_INVALID2, INDEX_PAGE_SIZE
+from dissect.cim.c_cim import (
+    INDEX_PAGE_INVALID,
+    INDEX_PAGE_INVALID2,
+    INDEX_PAGE_SIZE,
+    c_cim,
+)
 from dissect.cim.exceptions import ReferenceNotFoundError
 
 

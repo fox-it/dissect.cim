@@ -6,16 +6,19 @@
 import os
 from io import BytesIO
 
-from dissect.cim.c_cim import c_cim, ARRAY_STATES, NAMESPACE_CLASS_NAME, ROOT_NAMESPACE_NAME, SYSTEM_NAMESPACE_NAME
+from dissect.cim.c_cim import (
+    ARRAY_STATES,
+    NAMESPACE_CLASS_NAME,
+    ROOT_NAMESPACE_NAME,
+    SYSTEM_NAMESPACE_NAME,
+    c_cim,
+)
 from dissect.cim.classes import ClassDefinition, ClassInstance, PropertyDefaultValues
-from dissect.cim.exceptions import InvalidDatabaseError, Error
+from dissect.cim.exceptions import Error, InvalidDatabaseError
 from dissect.cim.index import Index, Key
 from dissect.cim.mappings import Mapping
 from dissect.cim.objects import Objects
-from dissect.cim.utils import (
-    find_current_mapping,
-    parse_object_path,
-)
+from dissect.cim.utils import find_current_mapping, parse_object_path
 
 
 class CIM:

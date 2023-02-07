@@ -1,6 +1,6 @@
 from io import BytesIO
 
-from dissect.cim.c_cim import c_cim, DATA_PAGE_SIZE
+from dissect.cim.c_cim import DATA_PAGE_SIZE, c_cim
 from dissect.cim.exceptions import Error
 
 
