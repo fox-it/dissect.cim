@@ -16,10 +16,11 @@ class Index:
     def __init__(self, cim, fh, mapping):
         self.store = Store(cim, fh, mapping)
 
+        self._lookup = lru_cache(1024)(self._lookup)
+
     def lookup(self, key):
         return self._lookup(str(key), self.store.root_page)
 
-    @lru_cache(1024)
     def _lookup(self, key, page):
         matches = []
 
@@ -94,6 +95,8 @@ class IndexPage:
 
         self.count = self.page.record_count
 
+        self.key = lru_cache(256)(self.key)
+
     def _string_part(self, idx):
         offset = self.page.string_table[idx]
         return self.data[offset : self.data.find(b"\x00", offset)].decode("utf8")
@@ -108,7 +111,6 @@ class IndexPage:
 
         return "/".join(parts)
 
-    @lru_cache(256)
     def key(self, idx):
         str_idx = self.page.keys[idx]
         key_idx = self.string(str_idx)

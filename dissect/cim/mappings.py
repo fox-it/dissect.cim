@@ -16,6 +16,8 @@ class Mapping:
 
         self._reverse_map = {}
 
+        self.get_entry = lru_cache(256)(self.get_entry)
+
     def __getitem__(self, k):
         if not isinstance(k, int):
             raise ValueError("Invalid type")
@@ -31,7 +33,6 @@ class Mapping:
 
             self._reverse_map[pnum] = i
 
-    @lru_cache(256)
     def get_entry(self, logical_num):
         if logical_num > self.mapping.mapping_entry_count:
             raise IndexError(logical_num)
