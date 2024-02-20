@@ -11,12 +11,12 @@ class Mapping:
         self.cim = cim
         self.mapping = cim.map_type(fh)
 
-        self.get_entry = lru_cache(256)(self.get_entry)
-
         if self.mapping.signature != 0xABCD:
             raise Error("Invalid mapping file!")
 
         self._reverse_map = {}
+
+        self.get_entry = lru_cache(256)(self.get_entry)
 
     def __getitem__(self, k):
         if not isinstance(k, int):

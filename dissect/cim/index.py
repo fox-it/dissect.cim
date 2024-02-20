@@ -15,6 +15,7 @@ from dissect.cim.exceptions import ReferenceNotFoundError
 class Index:
     def __init__(self, cim, fh, mapping):
         self.store = Store(cim, fh, mapping)
+
         self._lookup = lru_cache(1024)(self._lookup)
 
     def lookup(self, key):
@@ -88,13 +89,13 @@ class IndexPage:
         self.logical_num = logical_num
         self.page_num = page_num
 
-        self.key = lru_cache(256)(self.key)
-
         start = fh.tell()
         self.page = c_cim.index_page(fh)
         self.data = fh.read(INDEX_PAGE_SIZE - (fh.tell() - start))
 
         self.count = self.page.record_count
+
+        self.key = lru_cache(256)(self.key)
 
     def _string_part(self, idx):
         offset = self.page.string_table[idx]
