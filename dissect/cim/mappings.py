@@ -11,6 +11,8 @@ class Mapping:
         self.cim = cim
         self.mapping = cim.map_type(fh)
 
+        self.get_entry = lru_cache(256)(self.get_entry)
+
         if self.mapping.signature != 0xABCD:
             raise Error("Invalid mapping file!")
 
@@ -31,7 +33,6 @@ class Mapping:
 
             self._reverse_map[pnum] = i
 
-    @lru_cache(256)
     def get_entry(self, logical_num):
         if logical_num > self.mapping.mapping_entry_count:
             raise IndexError(logical_num)
