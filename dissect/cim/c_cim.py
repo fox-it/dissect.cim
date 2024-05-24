@@ -1,6 +1,6 @@
 from collections import namedtuple
 
-from dissect import cstruct
+from dissect.cstruct import cstruct
 
 cim_def = """
 // Mapping
@@ -195,8 +195,7 @@ struct class_instance_xp_header {
 };
 """
 
-c_cim = cstruct.cstruct()
-c_cim.load(cim_def, compiled=True)
+c_cim = cstruct().load(cim_def)
 
 DATA_PAGE_SIZE = 0x2000
 
