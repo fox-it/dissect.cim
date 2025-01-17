@@ -1,4 +1,8 @@
+from __future__ import annotations
+
+from functools import cached_property
 from io import BytesIO
+from typing import TYPE_CHECKING, Any, BinaryIO
 
 from dissect.util.ts import wintimestamp
 
@@ -10,32 +14,35 @@ from dissect.cim.c_cim import (
     CIM_TYPES,
     CIM_TYPES_MAP,
     DYNPROPS_STATES,
+    CimType,
     ClassDefinitionPropertyState,
     ClassInstancePropertyState,
     c_cim,
 )
 from dissect.cim.exceptions import Error
 
+if TYPE_CHECKING:
+    from datetime import datetime
+
+    from dissect.cim.cim import CIM, Class, Property
+
 
 class QualifierReference:
-    def __init__(self, fh):
+    def __init__(self, fh: BinaryIO):
         self.fh = fh
         self.qualifier_reference = c_cim.qualifier_reference(fh)
         self.key_reference = self.qualifier_reference.key_reference
         self.type = self.qualifier_reference.type
 
-        if self.type.array_state == ARRAY_STATES.ARRAY:
-            ctype = c_cim.uint32
-        else:
-            ctype = CIM_TYPES_MAP[self.type.type]
+        ctype = c_cim.uint32 if self.type.array_state == ARRAY_STATES.ARRAY else CIM_TYPES_MAP[self.type.type]
         self.data = fh.read(len(ctype))
-        self.value = ctype(self.data)
+        self.value: CimType | BOOLEAN_STATES = ctype(self.data)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "<QualifierReference>"
 
     @classmethod
-    def read_list(cls, fh):
+    def read_list(cls, fh: BinaryIO) -> list[QualifierReference]:
         res = []
         length = c_cim.uint32(fh)
         end = fh.tell() + length
@@ -44,35 +51,35 @@ class QualifierReference:
         return res
 
     @property
-    def is_builtin_key(self):
+    def is_builtin_key(self) -> bool:
         return self.key_reference & 0x80000000 > 0
 
     @property
-    def key(self):
+    def key(self) -> bool:
         return self.key_reference & 0x7FFFFFFF
 
 
 class PropertyReference:
-    def __init__(self, fh):
+    def __init__(self, fh: BinaryIO):
         self.fh = fh
         self.property_reference = c_cim.property_reference(fh)
         self.name_offset = self.property_reference.name_offset
         self.property_offset = self.property_reference.property_offset
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "<PropertyReference>"
 
     @classmethod
-    def read_list(cls, fh):
+    def read_list(cls, fh: BinaryIO) -> list[PropertyReference]:
         length = c_cim.uint32(fh)
         return [cls(fh) for _ in range(length)]
 
     @property
-    def is_builtin_property(self):
+    def is_builtin_property(self) -> bool:
         return self.name_offset & 0x80000000 > 0
 
     @property
-    def builtin_property_name(self):
+    def builtin_property_name(self) -> str:
         if not self.is_builtin_property:
             raise ValueError("Not a builtin")
         key = self.name_offset & 0x7FFFFFFF
@@ -80,31 +87,32 @@ class PropertyReference:
 
 
 class PropertyStates:
-    def __init__(self, fh, bit_tuple, num_properties):
+    def __init__(
+        self, fh: BinaryIO, state_cls: ClassDefinitionPropertyState | ClassInstancePropertyState, num_properties: int
+    ):
         self.fh = fh
-        self.bit_tuple = bit_tuple
+        self.state_cls = state_cls
         self.num_properties = num_properties
         self.entries = c_cim.uint8[self._property_state_length()](fh)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> ClassDefinitionPropertyState | ClassInstancePropertyState:
         if idx > self.num_properties:
             raise IndexError("Invalid property index")
 
         byte_of_state = self.entries[idx // 4]
         rotations = idx % 4
         state_flags = (byte_of_state >> (2 * rotations)) & 0x3
-        return self.bit_tuple(state_flags & 0b10 > 0, state_flags & 0b01 == 0)
+        return self.state_cls(state_flags & 0b10 > 0, state_flags & 0b01 == 0)
 
-    def _property_state_length(self):
+    def _property_state_length(self) -> int:
         required_bits = 2 * self.num_properties
         delta_to_nearest_byte = (8 - required_bits) % 8
         total_bits = required_bits + delta_to_nearest_byte
-        total_bytes = total_bits // 8
-        return total_bytes
+        return total_bits // 8
 
 
 class PropertyDefaultValues:
-    def __init__(self, fh, properties):
+    def __init__(self, fh: BinaryIO, properties: list[Property]):
         self.fh = fh
         self.properties = properties
         self.state = PropertyStates(fh, ClassDefinitionPropertyState, len(properties))
@@ -115,7 +123,7 @@ class PropertyDefaultValues:
 
 
 class ClassDefinitionProperty:
-    def __init__(self, data, propref):
+    def __init__(self, data: DataRegion, propref: PropertyReference):
         self._data = data
         self._propref = propref
 
@@ -139,74 +147,80 @@ class ClassDefinitionProperty:
         self.offset = self.property.offset
         self.level = self.property.level
 
-        self.qualifiers = {}
+        self.qualifiers: dict[str, Qualifier] = {}
         for q_ref in self.qualifier_references:
             qualifier = Qualifier(data, q_ref)
             self.qualifiers[qualifier.key] = qualifier
 
 
 class ClassInstanceProperty:
-    def __init__(self, class_instance, prop, value, state):
+    def __init__(
+        self,
+        class_instance: ClassInstance,
+        prop: Property,
+        value: CimType | list[CimType],
+        state: ClassDefinitionPropertyState | ClassInstancePropertyState,
+    ):
         self.class_instance = class_instance
         self._prop = prop
         self._value = value
         self.state = state
 
     @property
-    def type(self):
+    def type(self) -> c_cim.cim_type:
         return self._prop.type
 
     @property
-    def qualifiers(self):
+    def qualifiers(self) -> dict[str, Qualifier]:
         return self._prop.qualifiers
 
     @property
-    def name(self):
+    def name(self) -> str:
         return self._prop.name
 
     @property
-    def index(self):
+    def index(self) -> int:
         return self._prop.index
 
     @property
-    def offset(self):
+    def offset(self) -> int:
         return self._prop.offset
 
     @property
-    def level(self):
+    def level(self) -> int:
         return self._prop.level
 
     @property
-    def is_inherited(self):
+    def is_inherited(self) -> bool:
         return self._prop.is_inherited
 
     @property
-    def has_default_value(self):
+    def has_default_value(self) -> bool:
         return self._prop.has_default_value
 
     @property
-    def default_value(self):
+    def default_value(self) -> CimType | list[CimType]:
         return self._prop.default_value
 
     @property
-    def is_initialized(self):
+    def is_initialized(self) -> bool:
         return self.state.is_initialized
 
     @property
-    def is_default_value(self):
+    def is_default_value(self) -> bool:
         if self.is_initialized:
             return self.state.use_default_value
         return False
 
     @property
-    def value(self):
+    def value(self) -> CimType | list[CimType]:
         if not self.is_initialized:
             raise ValueError("Property is not initialized")
         return self._value
 
 
 class ClassDefinition:
-    def __init__(self, cim, fh):
+    def __init__(self, cim: CIM, fh: BinaryIO):
         self.cim = cim
         self.fh = fh
         self.header = c_cim.class_definition_header(fh)
@@ -219,7 +233,7 @@ class ClassDefinition:
         self.method_data = DataRegion(fh)
 
     @property
-    def qualifiers(self):
+    def qualifiers(self) -> dict[str, Qualifier]:
         qualifiers = {}
         for ref in self.qualifier_references:
             qualifier = Qualifier(self.property_data, ref)
@@ -227,7 +241,7 @@ class ClassDefinition:
         return qualifiers
 
     @property
-    def properties(self):
+    def properties(self) -> dict[str, ClassDefinitionProperty]:
         properties = {}
         for ref in self.property_references:
             prop = ClassDefinitionProperty(self.property_data, ref)
@@ -235,7 +249,7 @@ class ClassDefinition:
         return properties
 
     @property
-    def keys(self):
+    def keys(self) -> list[str]:
         keys = []
         for prop_name, prop in self.properties.items():
             for k, v in prop.qualifiers.items():
@@ -244,20 +258,20 @@ class ClassDefinition:
         return keys
 
     @property
-    def class_name(self):
+    def class_name(self) -> str:
         return self.property_data.get_string(self.header.class_name_offset)
 
     @property
-    def super_class_name(self):
+    def super_class_name(self) -> str:
         return self.header.super_class_name
 
     @property
-    def timestamp(self):
+    def timestamp(self) -> datetime:
         return wintimestamp(self.header.timestamp)
 
 
 class ClassInstance:
-    def __init__(self, cim, class_, fh):
+    def __init__(self, cim: CIM, class_: Class, fh: BinaryIO):
         self.cim = cim
         self.class_ = class_
         self.fh = fh
@@ -279,40 +293,37 @@ class ClassInstance:
         self.dynprops = Dynprops(buf)
         self.data = DataRegion(buf)
 
-        self._properties = None
-
     @property
-    def class_name(self):
+    def class_name(self) -> str:
         return self.data.get_string(0)
 
     @property
-    def qualifiers(self):
+    def qualifiers(self) -> dict[str, Qualifier]:
         qualifiers = {}
         for ref in self.qualifier_references:
             qualifier = Qualifier(self.data, ref)
             qualifiers[qualifier.key] = qualifier
         return qualifiers
 
+    @cached_property
+    def properties(self) -> dict[str, ClassInstanceProperty]:
+        properties = {}
+        for prop in self.class_.properties.values():
+            state = self.property_states[prop.index]
+
+            value = None
+            if state.is_initialized:
+                if state.use_default_value:
+                    value = prop.default_value
+                else:
+                    value = self.data.get_value(self.toc[prop.index], prop.type)
+
+            properties[prop.name] = ClassInstanceProperty(self, prop, value, state)
+
+        return properties
+
     @property
-    def properties(self):
-        if self._properties is None:
-            properties = {}
-            for prop in self.class_.properties.values():
-                state = self.property_states[prop.index]
-
-                value = None
-                if state.is_initialized:
-                    if state.use_default_value:
-                        value = prop.default_value
-                    else:
-                        value = self.data.get_value(self.toc[prop.index], prop.type)
-
-                properties[prop.name] = ClassInstanceProperty(self, prop, value, state)
-            self._properties = properties
-        return self._properties
-
-    @property
-    def key(self):
+    def key(self) -> InstanceKey:
         key = InstanceKey()
         for prop_name in self.class_.class_definition.keys:
             key[prop_name] = self.properties[prop_name].value
@@ -320,20 +331,20 @@ class ClassInstance:
 
 
 class InstanceKey(dict):
-    def __getattr__(self, key):
+    def __getattr__(self, key: str) -> Any:
         return self[key]
 
-    def __setattr__(self, key, value):
+    def __setattr__(self, key: str, value: Any):
         self[key] = value
 
-    def __str__(self):
+    def __str__(self) -> str:
         if len(self) == 0:
             return "default"
         return ";".join([f"{key}={value}" for key, value in self.items()])
 
 
 class Qualifier:
-    def __init__(self, data, qualref):
+    def __init__(self, data: DataRegion, qualref: QualifierReference):
         self._data = data
         self._qualref = qualref
 
@@ -345,7 +356,7 @@ class Qualifier:
 
 
 class Dynprops:
-    def __init__(self, fh):
+    def __init__(self, fh: BinaryIO):
         self.fh = fh
         self.dynprops_state = DYNPROPS_STATES._read(fh)
         self.dynprops = None
@@ -355,25 +366,25 @@ class Dynprops:
             c_cim.uint32(fh)
 
     @property
-    def has_dynprops(self):
+    def has_dynprops(self) -> bool:
         return self.dynprops_state == DYNPROPS_STATES.HAS_DYNPROPS
 
 
 class DynpropQualifier:
-    def __init__(self, fh):
+    def __init__(self, fh: BinaryIO):
         self.fh = fh
 
 
 class DataRegion:
-    def __init__(self, fh):
+    def __init__(self, fh: BinaryIO):
         self.fh = fh
         self.size = c_cim.uint32(fh) & 0x7FFFFFFF
         self.data = fh.read(self.size)
 
-    def open(self):
+    def open(self) -> BytesIO:
         return BytesIO(self.data)
 
-    def get_string(self, offset):
+    def get_string(self, offset: int) -> str:
         encoding_flag = self.data[offset]
 
         if encoding_flag == 0:
@@ -385,7 +396,7 @@ class DataRegion:
 
         return data_str
 
-    def get_array(self, offset, item_type):
+    def get_array(self, offset: int, item_type: c_cim.cim_type) -> list[CimType]:
         ctype = CIM_TYPES_MAP[item_type.type]
 
         buf = self.open()
@@ -393,14 +404,15 @@ class DataRegion:
         size = c_cim.uint32(buf)
         return ctype[size](buf)
 
-    def get_value(self, value, value_type):
+    def get_value(self, value: CimType | BOOLEAN_STATES, value_type: c_cim.cim_type) -> CimType | list[CimType]:
         if value_type.array_state == ARRAY_STATES.ARRAY:
             return self.get_array(value, value_type)
 
         t = value_type.type
         if t in (CIM_TYPES.STRING, CIM_TYPES.REFERENCE, CIM_TYPES.DATETIME):
             return self.get_string(value)
-        elif t == CIM_TYPES.BOOLEAN:
+
+        if t == CIM_TYPES.BOOLEAN:
             return value == BOOLEAN_STATES.TRUE
-        else:
-            ValueError("Unknown value type")
+
+        raise ValueError("Unknown value type")
