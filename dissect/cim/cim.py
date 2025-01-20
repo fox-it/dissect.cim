@@ -3,28 +3,45 @@
 # Information about e.g. data structures can also be found in:
 # https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-wmio/b44d0581-5bd3-40fc-95d7-01c1b1239820
 
-import os
+from __future__ import annotations
+
+from functools import cached_property
 from io import BytesIO
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, BinaryIO
 
 from dissect.cim.c_cim import (
     ARRAY_STATES,
     NAMESPACE_CLASS_NAME,
     ROOT_NAMESPACE_NAME,
     SYSTEM_NAMESPACE_NAME,
+    CimType,
     c_cim,
 )
-from dissect.cim.classes import ClassDefinition, ClassInstance, PropertyDefaultValues
+from dissect.cim.classes import (
+    ClassDefinition,
+    ClassDefinitionProperty,
+    ClassInstance,
+    InstanceKey,
+    PropertyDefaultValues,
+    Qualifier,
+)
 from dissect.cim.exceptions import Error, InvalidDatabaseError
 from dissect.cim.index import Index, Key
 from dissect.cim.mappings import Mapping
 from dissect.cim.objects import Objects
 from dissect.cim.utils import find_current_mapping, parse_object_path
 
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from dissect.cstruct import BaseType
+
 
 class CIM:
-    """Common Information Model"""
+    """Common Information Model."""
 
-    def __init__(self, index, objects, mappings):
+    def __init__(self, index: BinaryIO, objects: BinaryIO, mappings: list[BinaryIO]):
         self._findex = index
         self._fobjects = objects
         self._fmappings = mappings
@@ -62,18 +79,24 @@ class CIM:
         self.system = self.namespace(SYSTEM_NAMESPACE_NAME)
 
     @classmethod
-    def from_directory(cls, path):
-        path = os.path.abspath(path)
-        findex = open(os.path.join(path, "INDEX.BTR"), "rb")
-        fobjects = open(os.path.join(path, "OBJECTS.DATA"), "rb")
-        fmappings = [open(os.path.join(path, f"MAPPING{i}.MAP"), "rb") for i in range(1, 4)]
+    def from_directory(cls, path: Path | str) -> CIM:
+        if not isinstance(path, Path):
+            path = Path(path)
+
+        path = path.resolve()
+        if not path.is_dir():
+            raise ValueError(f"Path {path} is not a directory")
+
+        findex = path.joinpath("INDEX.BTR").open("rb")
+        fobjects = path.joinpath("OBJECTS.DATA").open("rb")
+        fmappings = [path.joinpath(f"MAPPING{i}.MAP").open("rb") for i in range(1, 4)]
 
         return cls(findex, fobjects, fmappings)
 
-    def key(self, *args):
+    def key(self, *args) -> Key:
         return Key(self, *args)
 
-    def query(self, path, ns=None):
+    def query(self, path: str, ns: Namespace | None = None) -> Namespace | Class | Instance:
         if ns is not None and not isinstance(ns, Namespace):
             raise TypeError("namespace should be an instance of Namespace")
         object_path = parse_object_path(path, ns)
@@ -94,48 +117,48 @@ class CIM:
 
         return obj
 
-    def namespace(self, name):
+    def namespace(self, name: str) -> Namespace:
         return Namespace(self, name)
 
-    def _parse_instance(self, class_, buf):
+    def _parse_instance(self, class_: Class, buf: BytesIO) -> ClassInstance:
         return ClassInstance(self, class_, buf)
 
-    def get_class_definition(self, q):
+    def get_class_definition(self, q: Key) -> ClassDefinition:
         if not q.reference():
             q = self.key().NS(SYSTEM_NAMESPACE_NAME).CD(q["CD"])
         return ClassDefinition(self, q.object())
 
-    def get_class_instance(self, class_, q):
+    def get_class_instance(self, class_: Class, q: Key) -> ClassInstance:
         return self._parse_instance(class_, q.object())
 
 
 class Namespace:
-    def __init__(self, cim, name, class_instance=None):
+    def __init__(self, cim: CIM, name: str, class_instance: ClassInstance | None = None):
         self.cim = cim
         self.name = name
         self.class_instance = class_instance
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<Namespace {self.name}>"
 
-    def query(self, path):
+    def query(self, path: str) -> Namespace | Class | Instance:
         return self.cim.query(path, self)
 
     @property
-    def ci(self):
+    def ci(self) -> ClassInstance | None:
         return self.class_instance
 
-    def parent(self):
-        raise NotImplementedError()
+    def parent(self) -> Namespace:
+        raise NotImplementedError
 
-    def class_(self, class_name):
+    def class_(self, class_name: str) -> Class:
         q = self.cim.key().NS(self.name).CD(class_name)
         class_def = self.cim.get_class_definition(q)
 
         return Class(self.cim, self, class_def)
 
     @property
-    def classes(self):
+    def classes(self) -> Iterator[Class]:
         yielded = set()
 
         if self.name != SYSTEM_NAMESPACE_NAME:
@@ -154,15 +177,16 @@ class Namespace:
                 yield class_
                 yielded.add(class_.name)
 
-    def namespace(self, name):
-        main_name = "\\".join([self.name, name]).lower()
-        for name_spc in self.namespaces:
-            if name_spc.name.lower() == main_name:
-                return name_spc
-        raise IndexError()
+    def namespace(self, name: str) -> Namespace:
+        main_name = f"{self.name}\\{name}".lower()
+        for ns in self.namespaces:
+            if ns.name.lower() == main_name:
+                return ns
+
+        raise IndexError
 
     @property
-    def namespaces(self):
+    def namespaces(self) -> Iterator[Namespace]:
         yielded = set()
 
         q = self.cim.key().NS(self.name).CI(NAMESPACE_CLASS_NAME).IL()
@@ -170,7 +194,7 @@ class Namespace:
 
         for ref in q.references():
             class_instance = self.cim.get_class_instance(class_def, ref)
-            ns = Namespace(self.cim, "\\".join([self.name, class_instance.properties["Name"].value]), class_instance)
+            ns = Namespace(self.cim, f"{self.name}\\{class_instance.properties['Name'].value}", class_instance)
 
             if ns.name not in yielded:
                 yield ns
@@ -181,36 +205,34 @@ class Namespace:
 
 
 class Class:
-    def __init__(self, cim, namespace, class_definition):
+    def __init__(self, cim: CIM, namespace: Namespace, class_definition: ClassDefinition):
         self.cim = cim
         self.namespace = namespace
         self.class_definition = class_definition
 
         self._properties = None
 
-    def __getattr__(self, attr):
+    def __getattr__(self, attr: str) -> Any:
         try:
             return getattr(self.class_definition, attr)
         except AttributeError:
             return object.__getattribute__(self, attr)
 
     @property
-    def name(self):
+    def name(self) -> str:
         return self.class_definition.class_name
 
     @property
-    def ns(self):
+    def ns(self) -> Namespace:
         return self.namespace
 
     @property
-    def cd(self):
+    def cd(self) -> ClassDefinition:
         return self.class_definition
 
     @property
-    def derivation(self):
-        """
-        list from root to leaf of class layouts
-        """
+    def derivation(self) -> list[Class]:
+        """List from root to leaf of class layouts."""
         derivation = []
 
         class_ = self
@@ -225,24 +247,22 @@ class Class:
         derivation.reverse()
         return derivation
 
-    @property
-    def properties(self):
-        if self._properties is None:
-            props = {}
-            for class_ in self.derivation:
-                for prop in class_.class_definition.properties.values():
-                    props[prop.name] = Property(self, prop)
-            self._properties = props
-        return self._properties
+    @cached_property
+    def properties(self) -> dict[str, Property]:
+        props = {}
+        for class_ in self.derivation:
+            for prop in class_.class_definition.properties.values():
+                props[prop.name] = Property(self, prop)
+        return props
 
     @property
-    def property_default_values(self):
+    def property_default_values(self) -> PropertyDefaultValues:
         props = self.properties.values()
         props = sorted(props, key=lambda p: p.index)
         return PropertyDefaultValues(BytesIO(self.class_definition.default_values_data), props)
 
     @property
-    def properties_length(self):
+    def properties_length(self) -> int:
         off = 0
         for prop in self.properties.values():
             if prop.type.array_state == ARRAY_STATES.ARRAY:
@@ -251,15 +271,15 @@ class Class:
                 off += len(prop.ctype)
         return off
 
-    def instance(self, key):
+    def instance(self, key: str) -> Instance:
         for instance in self.instances:
             if instance.key == key:
                 return instance
 
-        raise IndexError()
+        raise IndexError
 
     @property
-    def instances(self):
+    def instances(self) -> Iterator[Instance]:
         yielded = set()
 
         q = self.cim.key().NS(self.namespace.name).CI(self.name).IL()
@@ -275,79 +295,83 @@ class Class:
 
 
 class Instance:
-    def __init__(self, cim, namespace, class_, class_instance):
+    def __init__(self, cim: CIM, namespace: Namespace, class_: Class, class_instance: ClassInstance):
         self.cim = cim
         self.namespace = namespace
         self.class_ = class_
         self.class_definition = class_.class_definition
         self.class_instance = class_instance
 
-    def __getattr__(self, attr):
+    def __getattr__(self, attr: str) -> Any:
         try:
             return getattr(self.class_instance, attr)
         except AttributeError:
             return object.__getattribute__(self, attr)
 
     @property
-    def name(self):
+    def key(self) -> InstanceKey:
+        return self.class_instance.key
+
+    @property
+    def name(self) -> str:
         return self.class_instance.class_name
 
     @property
-    def ns(self):
+    def ns(self) -> Namespace:
         return self.namespace
 
     @property
-    def cd(self):
+    def cd(self) -> ClassDefinition:
         return self.class_definition
 
     @property
-    def ci(self):
+    def ci(self) -> ClassInstance:
         return self.class_instance
 
 
 class Property:
-    def __init__(self, class_, prop):
+    def __init__(self, class_: Class, prop: ClassDefinitionProperty):
         self.class_ = class_
         self._prop = prop
 
     @property
-    def type(self):
+    def type(self) -> c_cim.cim_type:
         return self._prop.type
 
     @property
-    def ctype(self):
+    def ctype(self) -> BaseType:
         return self._prop.ctype
 
     @property
-    def qualifiers(self):
+    def qualifiers(self) -> dict[str, Qualifier]:
         return self._prop.qualifiers
 
     @property
-    def name(self):
+    def name(self) -> str:
         return self._prop.name
 
     @property
-    def index(self):
+    def index(self) -> int:
         return self._prop.index
 
     @property
-    def offset(self):
+    def offset(self) -> int:
         return self._prop.offset
 
     @property
-    def level(self):
+    def level(self) -> int:
         return self._prop.level
 
     @property
-    def is_inherited(self):
+    def is_inherited(self) -> bool:
         return self.class_.property_default_values.state[self.index].is_inherited
 
     @property
-    def has_default_value(self):
+    def has_default_value(self) -> bool:
         return self.class_.property_default_values.state[self.index].has_default_value
 
     @property
-    def default_value(self):
+    def default_value(self) -> CimType | list[CimType]:
         if not self.has_default_value:
             raise ValueError("Property has no default value!")
 
@@ -355,22 +379,23 @@ class Property:
             # then the data is stored nicely in the CD prop data section
             v = self.class_.property_default_values.default_values[self.index]
             return self.class_.class_definition.property_data.get_value(v, self.type)
-        else:
-            # we have to walk up the derivation path looking for the default value
-            rderivation = self.class_.derivation[:]
-            rderivation.reverse()
 
-            for ancestor_cl in rderivation:
-                defaults = ancestor_cl.property_default_values
-                state = defaults.state[self.index]
-                if not state.has_default_value:
-                    raise Error("Property with inherited default value has bad ancestor (no default value)")
+        # we have to walk up the derivation path looking for the default value
+        rderivation = self.class_.derivation[:]
+        rderivation.reverse()
 
-                if state.is_inherited:
-                    # keep trucking! look further up the ancestry tree.
-                    continue
+        for ancestor_cl in rderivation:
+            defaults = ancestor_cl.property_default_values
+            state = defaults.state[self.index]
+            if not state.has_default_value:
+                raise Error("Property with inherited default value has bad ancestor (no default value)")
 
-                # else, this must be where the default value is defined
-                v = defaults.default_values[self.index]
-                return ancestor_cl.class_definition.property_data.get_value(v, self.type)
-            raise Error("Unable to find ancestor class with default value")
+            if state.is_inherited:
+                # keep trucking! look further up the ancestry tree.
+                continue
+
+            # else, this must be where the default value is defined
+            v = defaults.default_values[self.index]
+            return ancestor_cl.class_definition.property_data.get_value(v, self.type)
+
+        raise Error("Unable to find ancestor class with default value")

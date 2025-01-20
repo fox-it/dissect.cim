@@ -1,4 +1,4 @@
-from collections import namedtuple
+from typing import NamedTuple, Union
 
 from dissect.cstruct import cstruct
 
@@ -240,5 +240,14 @@ CIM_TYPES_MAP = {
     CIM_TYPES.CHAR16: c_cim.wchar,
 }
 
-ClassDefinitionPropertyState = namedtuple("ClassDefinitionPropertyState", ["is_inherited", "has_default_value"])
-ClassInstancePropertyState = namedtuple("ClassInstancePropertyState", ["use_default_value", "is_initialized"])
+CimType = Union[int, float, str, bool]
+
+
+class ClassDefinitionPropertyState(NamedTuple):
+    is_inherited: bool
+    has_default_value: bool
+
+
+class ClassInstancePropertyState(NamedTuple):
+    use_default_value: bool
+    is_initialized: bool

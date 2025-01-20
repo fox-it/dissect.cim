@@ -1,26 +1,32 @@
-from collections import namedtuple
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, BinaryIO, NamedTuple
 
 from dissect.cim.c_cim import c_cim
 from dissect.cim.exceptions import Error
 
-ObjectPath = namedtuple("ObjectPath", ["hostname", "namespace", "class_", "instance"])
+if TYPE_CHECKING:
+    from dissect.cim.cim import Namespace
 
 
-def is_xp_mapping(h):
+class ObjectPath(NamedTuple):
+    hostname: str
+    namespace: str
+    class_: str
+    instance: dict[str, str]
+
+
+def is_xp_mapping(h: c_cim.mapping_header | c_cim.mapping_header_xp) -> bool:
     if h.signature != 0xABCD:
         raise Error("Invalid mapping file signature")
 
     if h.mapping_entry_count < h.physical_page_count // 10:
         return True
 
-    if hasattr(h, "first_id") and hasattr(h, "second_id"):
-        if h.first_id - 1 != h.second_id:
-            return True
-
-    return False
+    return bool(hasattr(h, "first_id") and hasattr(h, "second_id") and h.first_id - 1 != h.second_id)
 
 
-def find_current_mapping(mappings):
+def find_current_mapping(mappings: list[BinaryIO]) -> tuple[bool, BinaryIO]:
     map_header = c_cim.mapping_header
     type_xp = None
     current = None
@@ -45,11 +51,11 @@ def find_current_mapping(mappings):
     return type_xp, current
 
 
-def parse_object_path(object_path, ns=None):
-    """
-    given a textual query string, parse it into an object path that we can query.
+def parse_object_path(object_path: str, ns: Namespace | None = None) -> ObjectPath:
+    """Given a textual query string, parse it into an object path that we can query.
 
-    supported schemas:
+    Supported schemas::
+
         cimv2 --> namespace
         //./root/cimv2 --> namespace
         //HOSTNAME/root/cimv2 --> namespace
@@ -59,7 +65,8 @@ def parse_object_path(object_path, ns=None):
         Win32_Service.Name='Beep' --> instance
         //./root/cimv2:Win32_Service.Name="Beep" --> instance
 
-    we'd like to support this, but can't differentiate this
+    We'd like to support this, but can't differentiate this::
+
         from a class:
         //./root/cimv2/Win32_Service --> class
 
@@ -73,9 +80,7 @@ def parse_object_path(object_path, ns=None):
     o_object_path = object_path
     object_path = object_path.replace("\\", "/")
 
-    if object_path.startswith("winmgmts:"):
-        # winmgmts://./root/cimv2 --> namespace
-        object_path = object_path[len("winmgmts:") :]
+    object_path = object_path.removeprefix("winmgmts:")
 
     hostname = "localhost"
     namespace = ns.name if ns else None
@@ -112,22 +117,22 @@ def parse_object_path(object_path, ns=None):
         if is_rooted:
             ns = object_path.replace("/", "\\")
             return ObjectPath(hostname, ns, "", {})
-        else:
-            if ns is None:
-                raise Error("Relative query but no namespace")
 
+        if ns is None:
+            raise Error("Relative query but no namespace")
+
+        try:
+            # relative namespace
+            ns.namespace(object_path)
+            ns1 = ns.name.replace("/", "\\")
+            ns2 = object_path.replace("/", "\\")
+            return ObjectPath(hostname, ns1 + "\\" + ns2, "", {})
+        except IndexError:
             try:
-                # relative namespace
-                ns.namespace(object_path)
-                ns1 = ns.name.replace("/", "\\")
-                ns2 = object_path.replace("/", "\\")
-                return ObjectPath(hostname, ns1 + "\\" + ns2, "", {})
+                ns.class_(object_path)
+                namespace = ns.name
             except IndexError:
-                try:
-                    ns.class_(object_path)
-                    namespace = ns.name
-                except IndexError:
-                    raise RuntimeError("Unknown ObjectPath schema: %s" % o_object_path)
+                raise RuntimeError(f"Unknown ObjectPath schema: {o_object_path}")
 
     # Win32_Service --> class
     # Win32_Service.Name="Beep" --> instance
@@ -137,6 +142,7 @@ def parse_object_path(object_path, ns=None):
             for key in keys.split(","):
                 k, _, v = key.partition("=")
                 instance[k] = v.strip("\"'")
+
     class_name = object_path
     ns = namespace.replace("/", "\\")
     return ObjectPath(hostname, ns, class_name, instance)

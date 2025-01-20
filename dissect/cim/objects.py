@@ -1,14 +1,22 @@
+from __future__ import annotations
+
 from io import BytesIO
+from typing import TYPE_CHECKING, BinaryIO
 
 from dissect.cim.c_cim import DATA_PAGE_SIZE, c_cim
 from dissect.cim.exceptions import Error
 
+if TYPE_CHECKING:
+    from dissect.cim.cim import CIM
+    from dissect.cim.index import Key
+    from dissect.cim.mappings import Mapping
+
 
 class Objects:
-    def __init__(self, cim, fh, mapping):
+    def __init__(self, cim: CIM, fh: BinaryIO, mapping: Mapping):
         self.store = Store(cim, fh, mapping)
 
-    def get(self, key):
+    def get(self, key: Key) -> BytesIO:
         if not key.is_data_reference:
             raise ValueError(f"Key is not a data reference: {key}")
 
@@ -41,26 +49,26 @@ class Objects:
 
 
 class Store:
-    def __init__(self, cim, fh, mapping):
+    def __init__(self, cim: CIM, fh: BinaryIO, mapping: Mapping):
         self.cim = cim
         self.fh = fh
         self.map = mapping
 
-    def page(self, logical_num):
+    def page(self, logical_num: int) -> DataPage:
         page_number = self.map.get_entry(logical_num).page_number
         buf = self.physical_page(page_number)
         return DataPage(self, BytesIO(buf), logical_num, page_number)
 
-    def logical_page(self, logical_num):
+    def logical_page(self, logical_num: int) -> bytes:
         return self.physical_page(self.map.get_entry(logical_num).page_number)
 
-    def physical_page(self, page_number):
+    def physical_page(self, page_number: int) -> bytes:
         self.fh.seek(DATA_PAGE_SIZE * page_number)
         return self.fh.read(DATA_PAGE_SIZE)
 
 
 class DataPage:
-    def __init__(self, store, fh, logical_num, page_number):
+    def __init__(self, store: Store, fh: BinaryIO, logical_num: int, page_number: int):
         self.store = store
         self.fh = fh
         self.logical_num = logical_num
@@ -68,7 +76,7 @@ class DataPage:
 
         self.toc = TOC(fh)
 
-    def data(self, key):
+    def data(self, key: Key) -> bytes:
         target_id = key.data_id
         target_size = key.data_length
 
@@ -84,14 +92,14 @@ class DataPage:
                 self.fh.seek(entry.offset)
                 return self.fh.read(entry.size)
 
-        raise IndexError()
+        raise IndexError
 
-    def objects(self):
+    def objects(self) -> None:
         pass
 
 
 class TOC:
-    def __init__(self, fh):
+    def __init__(self, fh: BinaryIO):
         self.fh = fh
         self.entries = []
 
@@ -103,5 +111,5 @@ class TOC:
 
         self.count = len(self.entries)
 
-    def __getitem__(self, k):
+    def __getitem__(self, k: int) -> c_cim.toc_entry:
         return self.entries[k]
