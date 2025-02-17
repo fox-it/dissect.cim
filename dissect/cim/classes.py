@@ -331,6 +331,8 @@ class ClassInstance:
 
 
 class InstanceKey(dict):
+    """InstanceKey"""
+
     def __getattr__(self, key: str) -> Any:
         return self[key]
 
