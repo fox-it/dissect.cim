@@ -331,7 +331,17 @@ class ClassInstance:
 
 
 class InstanceKey(dict):
-    """InstanceKey"""
+    """A dictionary subclass that allows for attribute-style access and assignment.
+
+    Is represented as a string in the format "key1=value1;key2=value2" or "default" if empty.
+
+    Example:
+
+        >>> d = InstanceKey()
+        >>> d.foo = "bar"
+        >>> d.foo
+        "bar"
+    """
 
     def __getattr__(self, key: str) -> Any:
         return self[key]
