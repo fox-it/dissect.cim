@@ -21,14 +21,14 @@ def open_file_gz(name: str, mode: str = "rb") -> Iterator[gzip.GzipFile]:
 
 @pytest.fixture
 def index_bin() -> Iterator[BinaryIO]:
-    yield from open_file_gz("data/INDEX.BTR.gz")
+    yield from open_file_gz("_data/INDEX.BTR.gz")
 
 
 @pytest.fixture
 def objects_bin() -> Iterator[BinaryIO]:
-    yield from open_file_gz("data/OBJECTS.DATA.gz")
+    yield from open_file_gz("_data/OBJECTS.DATA.gz")
 
 
 @pytest.fixture
 def mappings_bin() -> Iterator[list[BinaryIO]]:
-    yield from zip(*[open_file_gz(f"data/MAPPING{i}.MAP.gz") for i in range(1, 4)])
+    yield from zip(*[open_file_gz(f"_data/MAPPING{i}.MAP.gz") for i in range(1, 4)])
