@@ -22,6 +22,7 @@ from dissect.cim.classes import (
     ClassDefinition,
     ClassDefinitionProperty,
     ClassInstance,
+    ClassInstanceProperty,
     InstanceKey,
     PropertyDefaultValues,
     Qualifier,
@@ -302,12 +303,6 @@ class Instance:
         self.class_definition = class_.class_definition
         self.class_instance = class_instance
 
-    def __getattr__(self, attr: str) -> Any:
-        try:
-            return getattr(self.class_instance, attr)
-        except AttributeError:
-            return object.__getattribute__(self, attr)
-
     @property
     def key(self) -> InstanceKey:
         return self.class_instance.key
@@ -327,6 +322,10 @@ class Instance:
     @property
     def ci(self) -> ClassInstance:
         return self.class_instance
+
+    @property
+    def properties(self) -> dict[str, ClassInstanceProperty]:
+        return self.class_instance.properties
 
 
 class Property:

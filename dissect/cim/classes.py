@@ -424,6 +424,18 @@ class DataRegion:
         if t in (CIM_TYPES.STRING, CIM_TYPES.REFERENCE, CIM_TYPES.DATETIME):
             return self.get_string(value)
 
+        if t in (
+            CIM_TYPES.INT8,
+            CIM_TYPES.UINT8,
+            CIM_TYPES.INT16,
+            CIM_TYPES.UINT16,
+            CIM_TYPES.INT32,
+            CIM_TYPES.UINT32,
+            CIM_TYPES.INT64,
+            CIM_TYPES.UINT64,
+        ):
+            return value
+
         if t == CIM_TYPES.BOOLEAN:
             return value == BOOLEAN_STATES.TRUE
 
