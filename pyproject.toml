@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "dissect.cim"
 description = "A Dissect module implementing a parser for the Windows Common Information Model (CIM) database, used in the Windows operating system"
 readme = "README.md"
-requires-python = "~=3.9"
+requires-python = ">=3.10"
 license.text = "Affero General Public License v3"
 authors = [
   {name = "Dissect Team", email = "dissect@fox-it.com"}
