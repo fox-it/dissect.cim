@@ -31,4 +31,4 @@ def objects_bin() -> Iterator[BinaryIO]:
 
 @pytest.fixture
 def mappings_bin() -> Iterator[list[BinaryIO]]:
-    yield from zip(*[open_file_gz(f"_data/MAPPING{i}.MAP.gz") for i in range(1, 4)])
+    yield from zip(*[open_file_gz(f"_data/MAPPING{i}.MAP.gz") for i in range(1, 4)], strict=False)
