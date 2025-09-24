@@ -1,4 +1,4 @@
-from typing import NamedTuple, Union
+from typing import NamedTuple
 
 from dissect.cstruct import cstruct
 
@@ -240,7 +240,7 @@ CIM_TYPES_MAP = {
     CIM_TYPES.CHAR16: c_cim.wchar,
 }
 
-CimType = Union[int, float, str, bool]
+CimType = int | float | str | bool
 
 
 class ClassDefinitionPropertyState(NamedTuple):
