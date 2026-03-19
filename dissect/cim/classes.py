@@ -14,7 +14,6 @@ from dissect.cim.c_cim import (
     CIM_TYPES,
     CIM_TYPES_MAP,
     DYNPROPS_STATES,
-    CimType,
     ClassDefinitionPropertyState,
     ClassInstancePropertyState,
     c_cim,
@@ -24,6 +23,9 @@ from dissect.cim.exceptions import Error
 if TYPE_CHECKING:
     from datetime import datetime
 
+    from dissect.cim.c_cim import (
+        CimType,
+    )
     from dissect.cim.cim import CIM, Class, Property
 
 
@@ -336,7 +338,6 @@ class InstanceKey(dict):
     Is represented as a string in the format "key1=value1;key2=value2" or "default" if empty.
 
     Example:
-
         >>> d = InstanceKey()
         >>> d.foo = "bar"
         >>> d.foo

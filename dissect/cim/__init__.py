@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from dissect.cim.cim import CIM
 from dissect.cim.exceptions import (
     Error,
