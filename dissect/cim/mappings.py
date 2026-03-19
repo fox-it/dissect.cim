@@ -3,10 +3,11 @@ from __future__ import annotations
 from functools import cached_property, lru_cache
 from typing import TYPE_CHECKING, BinaryIO
 
-from dissect.cim.c_cim import MAPPING_PAGE_ID_MASK, UNMAPPED_PAGE_VALUE, c_cim
+from dissect.cim.c_cim import MAPPING_PAGE_ID_MASK, UNMAPPED_PAGE_VALUE
 from dissect.cim.exceptions import Error, UnmappedPageError
 
 if TYPE_CHECKING:
+    from dissect.cim.c_cim import c_cim
     from dissect.cim.cim import CIM
 
 

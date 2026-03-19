@@ -15,17 +15,12 @@ from dissect.cim.c_cim import (
     NAMESPACE_CLASS_NAME,
     ROOT_NAMESPACE_NAME,
     SYSTEM_NAMESPACE_NAME,
-    CimType,
     c_cim,
 )
 from dissect.cim.classes import (
     ClassDefinition,
-    ClassDefinitionProperty,
     ClassInstance,
-    ClassInstanceProperty,
-    InstanceKey,
     PropertyDefaultValues,
-    Qualifier,
 )
 from dissect.cim.exceptions import Error, InvalidDatabaseError
 from dissect.cim.index import Index, Key
@@ -37,6 +32,16 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
     from dissect.cstruct import BaseType
+
+    from dissect.cim.c_cim import (
+        CimType,
+    )
+    from dissect.cim.classes import (
+        ClassDefinitionProperty,
+        ClassInstanceProperty,
+        InstanceKey,
+        Qualifier,
+    )
 
 
 class CIM:
